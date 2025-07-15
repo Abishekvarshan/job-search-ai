@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Search AI - Gazette.lk</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f7fa;
+      max-width: 800px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      color: #007bff;
+    }
+    #searchForm {
+      display: flex;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    #queryInput {
+      flex-grow: 1;
+      padding: 10px;
+      font-size: 16px;
+      border: 2px solid #007bff;
+      border-radius: 4px;
+      outline: none;
+    }
+    #searchBtn, #allJobsBtn {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      border-radius: 4px;
+    }
+    #searchBtn:hover, #allJobsBtn:hover {
+      background-color: #0056b3;
+    }
+    #results {
+      margin-top: 20px;
+    }
+    .job-card {
+      background-color: #fff;
+      border-left: 5px solid #007bff;
+      padding: 15px 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .job-card p {
+      margin: 6px 0;
+    }
+    .job-card a {
+      color: #007bff;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .job-card a:hover {
+      text-decoration: underline;
+    }
+    /* Summary styling */
+    .summary-text {
+      background-color: #f0f4ff;
+      border-left: 4px solid #007bff;
+      padding: 10px 15px;
+      margin-top: 6px;
+      border-radius: 4px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: #333;
+      white-space: pre-wrap;
+    }
+    /* Dropdown styling */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+      margin-left: 10px;
+    }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #fff;
+      min-width: 300px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      padding: 10px;
+      border-radius: 8px;
+      z-index: 1;
+    }
+    .dropdown-content .dropdown-item {
+      padding: 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .dropdown-content .dropdown-item:last-child {
+      border-bottom: none;
+    }
+    .dropdown-content .dropdown-item:hover {
+      background-color: #f1f1f1;
+    }
+    .dropdown.active .dropdown-content {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Job Search AI - Gazette.lk</h1>
+
+  <form id="searchForm">
+    <input type="text" id="queryInput" placeholder="Enter job title (e.g., Station Master)" required />
+    <button type="submit" id="searchBtn">Search</button>
+    <div class="dropdown" id="allJobsDropdown">
+      <button type="button" id="allJobsBtn">All Jobs ▼</button>
+      <div class="dropdown-content" id="allJobsList">
+        <!-- jobs will populate here -->
+      </div>
+    </div>
+  </form>
+
+  <div id="results"></div>
+
+  <script>
+    const form = document.getElementById('searchForm');
+    const queryInput = document.getElementById('queryInput');
+    const resultsDiv = document.getElementById('results');
+    const allJobsBtn = document.getElementById('allJobsBtn');
+    const allJobsDropdown = document.getElementById('allJobsDropdown');
+    const allJobsList = document.getElementById('allJobsList');
+
+    // Toggle dropdown
+    allJobsBtn.addEventListener('click', async () => {
+      allJobsDropdown.classList.toggle('active');
+
+      if (allJobsDropdown.classList.contains('active') && allJobsList.children.length === 0) {
+        allJobsList.innerHTML = '<p>Loading all jobs...</p>';
+
+        try {
+          const response = await fetch('http://127.0.0.1:5000/alljobs');
+          const data = await response.json();
+
+          if (!data.jobs || !data.jobs.length) {
+            allJobsList.innerHTML = '<p>No jobs found.</p>';
+            return;
+          }
+
+          allJobsList.innerHTML = '';
+
+          data.jobs.forEach(job => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.textContent = job.title;
+            item.title = job.summary; // show summary on hover
+
+            item.addEventListener('click', () => {
+              allJobsDropdown.classList.remove('active');
+              showJobDetails(job);
+            });
+
+            allJobsList.appendChild(item);
+          });
+
+        } catch (error) {
+          allJobsList.innerHTML = `<p style="color:red;">Error loading jobs: ${error.message}</p>`;
+        }
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const query = queryInput.value.trim();
+      if (!query) return;
+
+      resultsDiv.innerHTML = '<p>Searching jobs...</p>';
+
+      try {
+        const response = await fetch('http://127.0.0.1:5000/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          resultsDiv.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+          return;
+        }
+
+        if (!data.results.length) {
+          resultsDiv.innerHTML = '<p>No job results found.</p>';
+          return;
+        }
+
+        resultsDiv.innerHTML = '';
+        data.results.forEach(job => {
+          appendJobCard(job);
+        });
+
+      } catch (error) {
+        resultsDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+      }
+    });
+
+    function showJobDetails(job) {
+      resultsDiv.innerHTML = ''; // clear previous
+      appendJobCard(job);
+    }
+
+    function appendJobCard(job) {
+      const card = document.createElement('div');
+      card.className = 'job-card';
+
+      card.innerHTML = `
+        <p>📌 <strong>Job Title:</strong> ${job.title}</p>
+        <p>🏢 <strong>Department:</strong> ${job.department}</p>
+        <p>🗓️ <strong>Deadline:</strong> ${job.deadline}</p>
+        <p>📄 <strong>Exam Info:</strong> ${job.exam_info}</p>
+        <p>🔗 <strong>Read More:</strong> <a href="${job.url}" target="_blank" rel="noopener noreferrer">Click here</a></p>
+        <p><em>Summary:</em></p>
+        <div class="summary-text">${job.summary}</div>
+      `;
+
+      resultsDiv.appendChild(card);
+    }
+  </script>
+</body>
+</html>
